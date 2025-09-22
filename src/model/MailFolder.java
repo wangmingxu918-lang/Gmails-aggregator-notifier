@@ -2,8 +2,6 @@ package model;
 
 import java.util.List;
 
-import javax.swing.JOptionPane;
-
 import java.util.ArrayList;
 
 public class MailFolder implements EmailComponent {
@@ -18,9 +16,14 @@ public class MailFolder implements EmailComponent {
         children.add(c); 
     }
 
+    public void addEmail(Email email) {
+        children.add(email);
+    }
+
     public String getName() {
         return name;
     }
+
     
     public void display() {
         System.out.println("Folder: " + name);
@@ -29,16 +32,17 @@ public class MailFolder implements EmailComponent {
         }
     }
 
+    public List<Email> getEmails() {
+    List<Email> result = new ArrayList<>();
+    for (EmailComponent child : children) {
+        if (child instanceof Email mail) {
+            result.add(mail);
+        }
+    }
+    return result;
+}
     public List<EmailComponent> getChildren() {
         return children;
     }
-
-    private static MailFolder createUserFolder() {
-    String folderName = JOptionPane.showInputDialog("Enter folder name:");
-    if (folderName == null || folderName.isBlank()) {
-        return null; // user cancelled
-    }
-    return new MailFolder(folderName);
-}
 
 }

@@ -1,14 +1,23 @@
 package model;
 
+import java.util.Date;
+
 public class Email implements EmailComponent {
-     private String subject;
+    private String subject;
     private String sender;
     private String body;
+    private Date date;
 
-    public Email(String subject, String sender, String body) {
+    public Email(String subject, String sender, String body, Date date) {
         this.subject = subject;
         this.sender = sender;
         this.body = body;
+        this.date = date;
+    }
+
+    // Old constructor for backward compatibility
+    public Email(String subject, String sender, String body) {
+        this(subject, sender, body, new Date());
     }
 
     @Override
@@ -30,5 +39,13 @@ public class Email implements EmailComponent {
 
     public String getBody() {
         return body;
+    }
+
+    public Date getDate() {
+        return date;
+    }
+    
+    public String getUniqueId() {
+        return sender + "|" + subject + "|" + date.getTime();
     }
 }
