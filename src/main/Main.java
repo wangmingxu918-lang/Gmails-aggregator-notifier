@@ -157,17 +157,36 @@ public class Main {
             });
 
             // --- 8️⃣ Observer for new emails ---
-            client.addObserver((emailObj, folder) -> SwingUtilities.invokeLater(() -> {
+            client.addObserver((emailObj, ignoredFolder) -> SwingUtilities.invokeLater(() -> {
+                // Apply sorting rules
+                MailFolder targetFolder = client.applyRules(emailObj); // returns the folder it belongs to
+
+                // Update GUI only if the target folder is currently selected
                 DefaultMutableTreeNode selectedNode =
                         (DefaultMutableTreeNode) folderTree.getLastSelectedPathComponent();
-                if (selectedNode != null && selectedNode.getUserObject() == folder) {
-                    emailListModel.addElement(emailObj.getSubject() + " - " + emailObj.getSender());
+                if (selectedNode != null && selectedNode.getUserObject() instanceof MailFolder folder
+                        && folder == targetFolder) {
+
+                    String displayText = String.format("%s - %s - %tF %<tT",
+                            emailObj.getSubject(),
+                            emailObj.getSender(),
+                            emailObj.getDate());
+                    emailListModel.addElement(displayText);
+
+                    // Automatically select the new email to display content
+                    int newIndex = emailListModel.getSize() - 1;
+                    emailList.setSelectedIndex(newIndex);
+                    emailList.ensureIndexIsVisible(newIndex);
                 }
+
+                // Optional: notification popup
                 JOptionPane.showMessageDialog(frame,
-                        "New email from " + emailObj.getSender(),
+                        "New email from " + emailObj.getSender() +
+                                " in folder \"" + targetFolder.getName() + "\"",
                         "New Email",
                         JOptionPane.INFORMATION_MESSAGE);
             }));
+
 
             // --- 9️⃣ Fetch emails in background ---
             SwingWorker<Void, Integer> worker = new SwingWorker<>() {
@@ -222,19 +241,19 @@ public class Main {
 
             // Optionally, load first folder emails into list
             DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) folderTree.getLastSelectedPathComponent();
-            if (selectedNode != null && selectedNode.getUserObject() instanceof MailFolder folder) {
-                emailListModel.clear();
-                EmailIterator it = new EmailIterator(folder);
-                while (it.hasNext()) {
-                    Email mail = (Email) it.next();
-                    emailListModel.addElement(mail.getSubject() + " - " + mail.getSender());
+                if (selectedNode != null && selectedNode.getUserObject() instanceof MailFolder folder) {
+                    emailListModel.clear();
+                    EmailIterator it = new EmailIterator(folder);
+                    while (it.hasNext()) {
+                        Email mail = (Email) it.next();
+                        emailListModel.addElement(mail.getSubject() + " - " + mail.getSender());
+                    }
                 }
             }
-        }
-    };
-    folderTree.setEnabled(false); // disable folder tree while loading
-    worker.execute();
-    loadingDialog.setVisible(true); // blocks until done()
+        };
+        folderTree.setEnabled(false); // disable folder tree while loading
+        worker.execute();
+        loadingDialog.setVisible(true); // blocks until done()
 
 
 
