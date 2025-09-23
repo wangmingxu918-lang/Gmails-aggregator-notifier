@@ -4,6 +4,7 @@ import model.*;
 
 import javax.mail.Folder;
 import javax.mail.Message;
+import javax.mail.UIDFolder;
 import javax.swing.*;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
@@ -206,9 +207,12 @@ public class Main {
                             Email emailObj = new Email(msg.getSubject(), msg.getFrom()[0].toString(), body);
 
                             // Instead of setUniqueId, just get it when needed
-                            String uid = emailObj.getUniqueId();
+                            UIDFolder uidFolder = (UIDFolder) imapInbox;
+                            long uid = uidFolder.getUID(msg);
+                            String uniqueId = "UID-" + uid;
+
                             client.getInboxFolder().addEmail(emailObj);
-                            client.getKnownEmails().add(uid);
+                            client.getKnownEmails().add(uniqueId);
 
                             // Apply rules immediately
                             client.applyRules(emailObj);
@@ -257,37 +261,26 @@ public class Main {
 
 
 
-            // --- 10 Start auto-refresh ---
-            new Timer(30_000, ev -> new SwingWorker<List<Email>, Void>() {
-            @Override
-            protected List<Email> doInBackground() {
-                return client.fetchNewEmails(host, email, password);
-            }
+        // --- 10 Start auto-refresh ---
+        new Timer(30_000, ev -> {
+            new SwingWorker<List<Email>, Void>() {
+                @Override
+                protected List<Email> doInBackground() {
+                    return client.fetchNewEmails(host, email, password);
+                }
 
-            @Override
-            protected void done() {
-                try {
-                    List<Email> emails = get();
-                    if (!emails.isEmpty()) {
-                        // batch GUI update using iterator
-                        DefaultMutableTreeNode selectedNode =
-                                (DefaultMutableTreeNode) folderTree.getLastSelectedPathComponent();
-                        if (selectedNode != null && selectedNode.getUserObject() instanceof MailFolder folder) {
-                            List<String> batch = new ArrayList<>();
-                            EmailIterator it = new EmailIterator(folder);
-                            while (it.hasNext()) {
-                                Email mail = (Email) it.next();
-                                batch.add(mail.getSubject() + " - " + mail.getSender());
-                            }
-                            SwingUtilities.invokeLater(() -> {
-                                emailListModel.clear();
-                                batch.forEach(emailListModel::addElement);
-                            });
+                @Override
+                protected void done() {
+                    try {
+                        List<Email> emails = get();
+                        for (Email emailObj : emails) {
+                            // Apply sorting rules
+                            MailFolder targetFolder = client.applyRules(emailObj);
+                            client.getObservers().forEach(obs -> obs.update(emailObj, targetFolder));
                         }
-                        JOptionPane.showMessageDialog(frame, emails.size() + " new email(s) received!");
-                    }
-                } catch (Exception ignored) {}
-            }
+                    } catch (Exception ignored) {}
+                }
+            }.execute();
         }).start();
 
         });

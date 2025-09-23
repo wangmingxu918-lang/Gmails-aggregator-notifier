@@ -7,6 +7,7 @@ public class Email implements EmailComponent {
     private String sender;
     private String body;
     private Date date;
+    private String serverId;
 
     public Email(String subject, String sender, String body, Date date) {
         this.subject = subject;
@@ -44,8 +45,13 @@ public class Email implements EmailComponent {
     public Date getDate() {
         return date;
     }
-    
-    public String getUniqueId() {
-        return sender + "|" + subject + "|" + date.getTime();
+
+     public void setServerId(String id) {
+        this.serverId = id;
     }
+
+    public String getServerId() {
+        return this.serverId;
+    }
+    
 }

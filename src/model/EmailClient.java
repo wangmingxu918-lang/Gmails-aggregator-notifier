@@ -2,10 +2,7 @@ package model;
 
 import javax.mail.*;
 import javax.mail.internet.MimeMultipart;
-import javax.swing.*;
 import javax.swing.Timer;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.io.IOException;
 import java.util.*;
 
@@ -53,51 +50,13 @@ public class EmailClient {
         store.connect(host, username, password);
     }
 
-    // Call this after fetchAllEmails() at startup
-    public void markExistingEmailsAsKnown() {
-        for (MailFolder folder : folders) {
-            for (Email email : folder.getEmails()) {
-                knownEmails.add(email.getUniqueId());
-            }
-        }
-    }
-
-
-    // Fetch all emails at startup
-    public void fetchAllEmails(String host, String username, String password) {
-        try {
-            if (store == null || !store.isConnected()) connect(host, username, password);
-
-            Folder imapInbox = store.getFolder("INBOX");
-            imapInbox.open(Folder.READ_ONLY);
-
-            Message[] messages = imapInbox.getMessages();
-            for (Message msg : messages) {
-                String body = getTextFromMessage(msg);
-                Email email = new Email(msg.getSubject(), msg.getFrom()[0].toString(), body);
-                inboxFolder.addEmail(email);
-                knownEmails.add(email.getUniqueId());
-            }
-            imapInbox.close(false);
-
-            // Apply rules retroactively
-            applyRulesToAllEmails();
-        } catch (Exception e) {
-            e.printStackTrace();
-            JOptionPane.showMessageDialog(null, "Error in fetchAllEmails: " + e.getMessage());
-        }
-    }
-
     // Auto-refresh to check new emails
     public void startAutoRefresh(String host, String username, String password, int intervalMs) {
         new Timer(intervalMs, e -> {
             List<Email> newEmails = fetchNewEmails(host, username, password);
             for (Email email : newEmails) {
-                if (!knownEmails.contains(email.getUniqueId())) {
-                    knownEmails.add(email.getUniqueId());
-                    MailFolder target = applyRules(email);
-                    notifyObservers(email, target);
-                }
+                MailFolder target = applyRules(email);
+                notifyObservers(email, target);
             }
         }).start();
     }
@@ -108,24 +67,41 @@ public class EmailClient {
         try {
             if (store == null || !store.isConnected()) connect(host, username, password);
 
-            Folder imapInbox = store.getFolder("INBOX");
-            imapInbox.open(Folder.READ_ONLY);
+            // Loop over all client folders
+            for (MailFolder folder : folders) {
+                Folder imapFolder = store.getFolder(folder.getName());
+                if (!imapFolder.exists()) continue; // skip if folder doesn't exist on server
+                imapFolder.open(Folder.READ_ONLY);
 
-            Message[] messages = imapInbox.getMessages();
-            for (Message msg : messages) {
-                String body = getTextFromMessage(msg);
-                Email email = new Email(msg.getSubject(), msg.getFrom()[0].toString(), body);
-                if (!knownEmails.contains(email.getUniqueId())) {
-                    inboxFolder.addEmail(email); // default folder
-                    newEmails.add(email);
+                UIDFolder uidFolder = (UIDFolder) imapFolder;
+                Message[] messages = imapFolder.getMessages();
+
+                for (Message msg : messages) {
+                    long uid = uidFolder.getUID(msg);
+                    String uniqueId = "UID-" + uid;
+
+                    if (!knownEmails.contains(uniqueId)) {
+                        String body = getTextFromMessage(msg);
+                        Email email = new Email(msg.getSubject(), msg.getFrom()[0].toString(), body);
+                        email.setServerId(uniqueId);
+
+                        // Initially add to Inbox; sorting rules will move it if needed
+                        inboxFolder.addEmail(email);
+                        knownEmails.add(uniqueId);
+                        newEmails.add(email);
+
+                        // Apply sorting rules immediately
+                        applyRules(email);
+                    }
                 }
+                imapFolder.close(false);
             }
-            imapInbox.close(false);
         } catch (Exception e) {
             e.printStackTrace();
         }
         return newEmails;
     }
+
 
     // Apply rules to a single email and return the folder it belongs to
     public MailFolder applyRules(Email email) {
